@@ -1,0 +1,16 @@
+{
+  "id": "/Dashboard-Finanzas/",
+  "name": "Dashboard Finanzas",
+  "short_name": "Finanzas",
+  "start_url": "/Dashboard-Finanzas/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

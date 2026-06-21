@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<title>Dashboard Finanzas</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2563eb">
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Finanzas DL" />
+  <meta name="theme-color" content="#080808" />
+  <title>Finanzas DL</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+    html, body { height:100%; background:#080808; color:#fff; }
+    body { font-family:-apple-system,'Inter','Segoe UI',system-ui,sans-serif; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+    input[type=number] { -moz-appearance:textfield; }
+    @keyframes fadeIn    { from{opacity:0;transform:translateY(6px)}  to{opacity:1;transform:none} }
+    @keyframes slideDown { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:none} }
+    @keyframes slideIn   { from{opacity:0;transform:translateX(18px)} to{opacity:1;transform:none} }
+    ::-webkit-scrollbar { width:0; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+const STORAGE_KEY = "finanzas-dl-v2";
+const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+// ── Default month data (template) ────────────────────────────────────────────
+const BASE_TEMPLATE = {
+  allocations: [
+    { id:1, label:"Necesidades Básicas", pct:60, color:"#ff3d3d" },
+    { id:2, label:"Ahorro",              pct:20, color:"#00e676" },
+    { id:3, label:"Formación",           pct:0,  color:"#7c6af7" },
+    { id:4, label:"Inversiones",         pct:10, color:"#f0a500" },
+    { id:5, label:"Diversión / Ocio",    pct:10, color:"#3b9de8" },
+    { id:6, label:"Donativos",           pct:0,  color:"#a0a0b0" },
+  ],
+  sections: [
+    { id:"fijos",     title:"Gastos Fijos",  color:"#ff3d3d", items:[] },
+    { id:"servicios", title:"Servicios",      color:"#3b9de8", items:[] },
+    { id:"alim",      title:"Alimentación",   color:"#f0a500", items:[] },
+    { id:"div",       title:"Diversión",      color:"#7c6af7", items:[] },
+  ],
+};
+
+// Crea un mes nuevo copiando la estructura del mes anterior (nombres, sin importes)
+const newMonthData = (prevMonthData) => {
+  const base = prevMonthData || { allocations: BASE_TEMPLATE.allocations, sections: BASE_TEMPLATE.sections };
+  return {
+    income: 0,
+    allocations: base.allocations.map(a => ({...a})),
+    sections: base.sections.map(sec => ({
+      ...sec,
+      // Copiar ítems con nombre pero importe en 0
+      items: sec.items.map(item => ({ ...item, id: uid(), amount: 0 })),
+    })),
+  };
+};
+
+// Pre-loaded Junio 2026 data
+const JUNIO_2026 = {
+  income: 2363982,
+  allocations: [
+    { id:1, label:"Necesidades Básicas", pct:60, color:"#ff3d3d" },
+    { id:2, label:"Ahorro",              pct:20, color:"#00e676" },
+    { id:3, label:"Formación",           pct:0,  color:"#7c6af7" },
+    { id:4, label:"Inversiones",         pct:10, color:"#f0a500" },
+    { id:5, label:"Diversión / Ocio",    pct:10, color:"#3b9de8" },
+    { id:6, label:"Donativos",           pct:0,  color:"#a0a0b0" },
+  ],
+  sections: [
+    { id:"fijos", title:"Gastos Fijos", color:"#ff3d3d", items:[
+      { id:1, name:"Jerarquicos",       amount:-123339 },
+      { id:2, name:"Nafta",             amount:-10000  },
+      { id:3, name:"Expensas Dpto",     amount:-150000 },
+      { id:4, name:"Triunfo Seguro",    amount:0       },
+      { id:5, name:"Mercado Pago Cred", amount:-143346.94 },
+      { id:6, name:"Para la casa",      amount:-300000 },
+    ]},
+    { id:"servicios", title:"Servicios", color:"#3b9de8", items:[
+      { id:1, name:"Claro Wifi",  amount:-98324.71 },
+      { id:2, name:"Claro Mamá",  amount:-32158.75 },
+      { id:3, name:"Google One",  amount:-18000    },
+      { id:4, name:"Game Pass",   amount:0         },
+      { id:5, name:"MASTER GOLD", amount:0         },
+      { id:6, name:"VISA",        amount:0         },
+      { id:7, name:"YouTube",     amount:0         },
+      { id:8, name:"Claro Pack",  amount:-5685     },
+    ]},
+    { id:"alim", title:"Alimentación", color:"#f0a500", items:[
+      { id:1, name:"Comida Simba", amount:0      },
+      { id:2, name:"Desayuno",     amount:-11875 },
+      { id:3, name:"Menú Barrio",  amount:-10400 },
+    ]},
+    { id:"div", title:"Diversión", color:"#7c6af7", items:[
+      { id:1, name:"Flotante Diversión", amount:236398.20 },
+    ]},
+  ],
+};
+
+const DEFAULT_ROOT = {
+  dashName: "Dashboard DL",
+  currentKey: "2026-06",
+  months: { "2026-06": JUNIO_2026 },
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const fmt = n => new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",maximumFractionDigits:0}).format(n);
+const fmtPlain = n => new Intl.NumberFormat("es-AR",{maximumFractionDigits:0}).format(n);
+const keyOf = (y,m) => `${y}-${String(m+1).padStart(2,"0")}`;
+const parseKey = k => { const [y,m]=k.split("-"); return {year:parseInt(y),monthIdx:parseInt(m)-1}; };
+
+let _nid = Date.now();
+const uid = () => ++_nid;
+
+const T = { xs:12, sm:14, base:16, md:18, lg:21, xl:23, hero:40, h1:27 };
+
+// ── Editable amount ───────────────────────────────────────────────────────────
+function AmountInput({ value, onChange }) {
+  const [editing, setEditing] = useState(false);
+  const [raw, setRaw] = useState("");
+  const start = () => { setRaw(value===0?"":String(value)); setEditing(true); };
+  const commit = () => { const p=parseFloat(raw.replace(",",".")); onChange(isNaN(p)?0:p); setEditing(false); };
+  if (editing) return (
+    <input autoFocus value={raw} onChange={e=>setRaw(e.target.value)}
+      onBlur={commit} onKeyDown={e=>{if(e.key==="Enter")commit();if(e.key==="Escape")setEditing(false);}}
+      style={{width:124,background:"#1e1e1e",border:"1px solid #00e676",borderRadius:8,
+        color:"#fff",fontSize:T.md,fontWeight:600,padding:"4px 10px",textAlign:"right",outline:"none"}}/>
+  );
+  return (
+    <span onClick={start} style={{
+      color:value<0?"#ff3d3d":value>0?"#00e676":"#555566",
+      fontWeight:700,fontSize:T.md,cursor:"pointer",
+      borderBottom:"1px dashed #2e2e2e",paddingBottom:1,
+    }}>{value===0?"—":fmt(value)}</span>
+  );
+}
+
+// ── Editable name ─────────────────────────────────────────────────────────────
+function NameInput({ value, onChange }) {
+  const [editing, setEditing] = useState(false);
+  const [raw, setRaw] = useState(value);
+  const commit = () => { onChange(raw||value); setEditing(false); };
+  if (editing) return (
+    <input autoFocus value={raw} onChange={e=>setRaw(e.target.value)}
+      onBlur={commit} onKeyDown={e=>{if(e.key==="Enter")commit();if(e.key==="Escape")setEditing(false);}}
+      style={{background:"#1e1e1e",border:"1px solid #7c6af7",borderRadius:8,
+        color:"#f0f0f0",fontSize:T.md,padding:"3px 9px",outline:"none",width:170}}/>
+  );
+  return (
+    <span onClick={()=>{setRaw(value);setEditing(true);}} style={{
+      color:"#e8e8f0",fontSize:T.md,cursor:"pointer",borderBottom:"1px dashed #2e2e2e",
+    }}>{value}</span>
+  );
+}
+
+// ── Progress bar ──────────────────────────────────────────────────────────────
+function Bar({ value, max, color }) {
+  const w = max ? Math.min(100,Math.abs(value/max)*100) : 0;
+  return (
+    <div style={{background:"#282828",borderRadius:99,height:4,overflow:"hidden",marginTop:8}}>
+      <div style={{width:`${w}%`,height:"100%",background:color,borderRadius:99,transition:"width .6s ease"}}/>
+    </div>
+  );
+}
+
+// ── Allocation card ───────────────────────────────────────────────────────────
+function AllocCard({ alloc, income, onChange }) {
+  const amount = income*(alloc.pct/100);
+  const active = alloc.pct > 0;
+  return (
+    <div style={{
+      background:active?`${alloc.color}18`:"#181818",
+      border:`1px solid ${active?alloc.color+"55":"#2e2e2e"}`,
+      borderRadius:20,padding:"16px 16px 14px",
+      boxShadow:active?`0 2px 16px ${alloc.color}18`:"0 2px 8px #00000060",
+    }}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <span style={{color:active?"#ffffff":"#666677",fontSize:T.base,fontWeight:600}}>{alloc.label}</span>
+        <div style={{display:"flex",alignItems:"center",gap:1,
+          background:active?`${alloc.color}22`:"#202020",borderRadius:99,padding:"3px 10px"}}>
+          <input type="number" min={0} max={100} value={alloc.pct}
+            onChange={e=>onChange({...alloc,pct:Math.max(0,Math.min(100,Number(e.target.value)))})}
+            style={{width:30,background:"none",border:"none",
+              color:active?alloc.color:"#555566",fontWeight:700,fontSize:T.sm,textAlign:"center",outline:"none"}}/>
+          <span style={{color:active?alloc.color:"#555566",fontSize:T.sm,fontWeight:700}}>%</span>
+        </div>
+      </div>
+      <div style={{color:active?"#fff":"#444455",fontWeight:800,fontSize:T.xl,letterSpacing:-0.5}}>
+        {fmt(amount)}
+      </div>
+      <Bar value={amount} max={income} color={alloc.color}/>
+    </div>
+  );
+}
+
+// ── Expense row ───────────────────────────────────────────────────────────────
+function ExpRow({ item, income, onChangeName, onChangeAmount, onDelete }) {
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 0",borderBottom:"1px solid #242424"}}>
+      <div style={{width:7,height:7,borderRadius:"50%",flexShrink:0,
+        background:item.amount!==0?"#ff3d3d":"#2a2a2a"}}/>
+      <div style={{flex:1}}><NameInput value={item.name} onChange={onChangeName}/></div>
+      <AmountInput value={item.amount} onChange={onChangeAmount}/>
+      {income>0&&item.amount!==0&&(
+        <span style={{color:"#666677",fontSize:T.sm,minWidth:28,textAlign:"right"}}>
+          {Math.round(Math.abs(item.amount)/income*100)}%
+        </span>
+      )}
+      <button onClick={onDelete} style={{background:"none",border:"none",color:"#383838",
+        cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 3px",flexShrink:0}}>×</button>
+    </div>
+  );
+}
+
+// ── Section ───────────────────────────────────────────────────────────────────
+function Section({ sec, income, onUpdate, onDelete }) {
+  const [open, setOpen] = useState(true);
+  const total = sec.items.reduce((s,i)=>s+i.amount,0);
+  const updateItem = (id,patch) => onUpdate({...sec,items:sec.items.map(i=>i.id===id?{...i,...patch}:i)});
+  const addItem    = ()         => onUpdate({...sec,items:[...sec.items,{id:uid(),name:"Nuevo ítem",amount:0}]});
+  const removeItem = (id)       => onUpdate({...sec,items:sec.items.filter(i=>i.id!==id)});
+  return (
+    <div style={{background:"#171717",borderRadius:16,border:"1px solid #2e2e2e",
+      overflow:"hidden",boxShadow:"0 2px 14px #00000075"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"16px 18px",
+        background:open?`${sec.color}18`:"transparent",
+        borderBottom:open?"1px solid #2a2a2a":"none"}}>
+        <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:10,flex:1,cursor:"pointer"}}>
+          <div style={{width:10,height:10,borderRadius:"50%",background:sec.color,
+            flexShrink:0,boxShadow:`0 0 7px ${sec.color}90`}}/>
+          <span style={{color:"#fff",fontWeight:700,fontSize:T.base}}>{sec.title}</span>
+          <span style={{background:"#222",color:"#888899",fontSize:T.xs,borderRadius:99,padding:"2px 8px"}}>
+            {sec.items.filter(i=>i.amount!==0).length} activos
+          </span>
+        </div>
+        <span style={{color:total<0?"#ff3d3d":total>0?"#00e676":"#666677",fontWeight:800,fontSize:T.base}}>
+          {fmt(total)}
+        </span>
+        <button onClick={onDelete} style={{background:"none",border:"none",color:"#333",cursor:"pointer",fontSize:20,padding:"0 4px"}}>×</button>
+        <span onClick={()=>setOpen(o=>!o)} style={{color:"#555566",cursor:"pointer",fontSize:18,userSelect:"none"}}>
+          {open?"▾":"▸"}
+        </span>
+      </div>
+      {open&&(
+        <div style={{padding:"2px 18px 12px",animation:"slideDown .15s ease"}}>
+          {sec.items.map(item=>(
+            <ExpRow key={item.id} item={item} income={income}
+              onChangeName={name=>updateItem(item.id,{name})}
+              onChangeAmount={amount=>updateItem(item.id,{amount})}
+              onDelete={()=>removeItem(item.id)}/>
+          ))}
+          <button onClick={addItem} style={{marginTop:10,background:"none",
+            border:`1px dashed ${sec.color}55`,color:sec.color,borderRadius:10,
+            padding:"8px 16px",fontSize:T.sm,cursor:"pointer",width:"100%",opacity:0.9}}>
+            + Agregar ítem
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Month picker modal ────────────────────────────────────────────────────────
+function MonthPicker({ currentKey, months, onSelect, onClose }) {
+  const allKeys = Object.keys(months).sort();
+  const [selYear, setSelYear] = useState(parseKey(currentKey).year);
+  const yearsWithData = [...new Set(allKeys.map(k=>parseKey(k).year))];
+  const years = Array.from(new Set([...yearsWithData, selYear])).sort();
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:200,
+      display:"flex",alignItems:"flex-end",justifyContent:"center"}}
+      onClick={onClose}>
+      <div style={{background:"#181818",borderRadius:"24px 24px 0 0",
+        padding:"24px 20px 36px",width:"100%",maxWidth:480,
+        animation:"fadeIn .2s ease"}}
+        onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <span style={{fontSize:T.base,fontWeight:700,color:"#fff"}}>Seleccionar mes</span>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#666677",fontSize:22,cursor:"pointer"}}>×</button>
+        </div>
+        {/* Year tabs */}
+        <div style={{display:"flex",gap:8,marginBottom:16}}>
+          {years.map(y=>(
+            <button key={y} onClick={()=>setSelYear(y)} style={{
+              padding:"6px 16px",borderRadius:99,border:"none",cursor:"pointer",fontSize:T.sm,fontWeight:700,
+              background:y===selYear?"#00e676":"#242424",
+              color:y===selYear?"#050505":"#888899",
+            }}>{y}</button>
+          ))}
+        </div>
+        {/* Month grid */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+          {MONTHS.map((name,i)=>{
+            const k = keyOf(selYear,i);
+            const hasData = !!months[k];
+            const isCurrent = k===currentKey;
+            return (
+              <button key={k} onClick={()=>onSelect(k,selYear,i)} style={{
+                padding:"12px 4px",borderRadius:12,border:"none",cursor:"pointer",
+                fontSize:T.sm,fontWeight:600,
+                background:isCurrent?"#00e676":hasData?"#242424":"#111",
+                color:isCurrent?"#050505":hasData?"#e0e0e0":"#444455",
+                boxShadow:isCurrent?"0 0 12px #00e67644":"none",
+              }}>{name.slice(0,3)}</button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function Toast({ msg }) {
+  if (!msg) return null;
+  return (
+    <div style={{position:"fixed",bottom:24,right:20,background:"#00e676",color:"#050505",
+      borderRadius:12,padding:"10px 20px",fontWeight:700,fontSize:T.sm,
+      boxShadow:"0 4px 24px #00e67650",zIndex:999,animation:"fadeIn .2s ease"}}>
+      {msg}
+    </div>
+  );
+}
+
+// ── App ───────────────────────────────────────────────────────────────────────
+function App() {
+  const [root, setRoot]           = useState(DEFAULT_ROOT);
+  const [toast, setToast]         = useState("");
+  const [saving, setSaving]       = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [editingIncome, setEI]    = useState(false);
+  const [rawIncome, setRawIncome] = useState("");
+  const saveTimer = useRef(null);
+
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem(STORAGE_KEY);
+      if (s) setRoot(JSON.parse(s));
+    } catch {}
+  }, []);
+
+  const saveRoot = useCallback((r) => {
+    clearTimeout(saveTimer.current);
+    setSaving(true);
+    saveTimer.current = setTimeout(() => {
+      try { localStorage.setItem(STORAGE_KEY,JSON.stringify(r)); } catch {}
+      setToast("Guardado ✓");
+      setTimeout(()=>setToast(""),1800);
+      setSaving(false);
+    }, 500);
+  }, []);
+
+  const updateRoot = useCallback((patch) => {
+    setRoot(prev => { const n={...prev,...patch}; saveRoot(n); return n; });
+  }, [saveRoot]);
+
+  // Current month data
+  const monthData = root.months[root.currentKey] || newMonthData();
+  const { year: curYear, monthIdx: curMonthIdx } = parseKey(root.currentKey);
+
+  const updateMonth = (patch) => {
+    const updated = {...monthData,...patch};
+    updateRoot({ months:{...root.months,[root.currentKey]:updated} });
+  };
+
+  // Navigate months
+  const navigate = (delta) => {
+    let mi = curMonthIdx + delta;
+    let y  = curYear;
+    if (mi<0)  { mi=11; y--; }
+    if (mi>11) { mi=0;  y++; }
+    const k = keyOf(y,mi);
+    if (!root.months[k]) {
+      updateRoot({ currentKey:k, months:{...root.months,[k]:newMonthData(monthData)} });
+    } else {
+      updateRoot({ currentKey:k });
+    }
+  };
+
+  const selectMonth = (k, y, mi) => {
+    if (!root.months[k]) {
+      updateRoot({ currentKey:k, months:{...root.months,[k]:newMonthData(monthData)} });
+    } else {
+      updateRoot({ currentKey:k });
+    }
+    setShowPicker(false);
+  };
+
+  const totalGastos = monthData.sections.flatMap(s=>s.items).reduce((s,i)=>s+i.amount,0);
+  const balance     = monthData.income + totalGastos;
+  const allocTotal  = monthData.allocations.reduce((s,a)=>s+a.pct,0);
+
+  const addSection = () => {
+    const colors=["#ff3d3d","#3b9de8","#f0a500","#7c6af7","#00e676","#a0a0b0"];
+    updateMonth({ sections:[...monthData.sections,{
+      id:`sec_${uid()}`,title:"Nueva sección",
+      color:colors[monthData.sections.length%colors.length],
+      items:[{id:uid(),name:"Ítem 1",amount:0}],
+    }]});
+  };
+
+  const startEditIncome = () => { setRawIncome(String(monthData.income)); setEI(true); };
+  const commitIncome = () => {
+    const p = parseFloat(rawIncome.replace(/\./g,"").replace(",","."));
+    updateMonth({ income:isNaN(p)?monthData.income:p });
+    setEI(false);
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:"#080808",color:"#fff",
+      padding:"28px 18px 56px",maxWidth:620,margin:"0 auto"}}>
+
+      {/* ── Header ── */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}>
+        <div>
+          <div style={{color:"#666677",fontSize:T.xs,letterSpacing:2.5,textTransform:"uppercase",marginBottom:4}}>
+            Finanzas Personales
+          </div>
+          <h1 style={{fontSize:T.h1,fontWeight:800,letterSpacing:-0.5,lineHeight:1.1,marginBottom:2}}>
+            {root.dashName}
+          </h1>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:5,paddingTop:6}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:saving?"#f0a500":"#2e2e2e"}}/>
+          <span style={{fontSize:T.xs,color:saving?"#f0a500":"#444455"}}>
+            {saving?"Guardando…":"Guardado"}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Month navigator ── */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+        background:"#141414",border:"1px solid #2a2a2a",borderRadius:16,
+        padding:"12px 16px",marginBottom:22}}>
+        <button onClick={()=>navigate(-1)} style={{background:"#222",border:"none",
+          color:"#aaaabc",borderRadius:10,width:36,height:36,fontSize:18,
+          cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+
+        <div onClick={()=>setShowPicker(true)} style={{textAlign:"center",cursor:"pointer",flex:1}}>
+          <div style={{fontSize:T.lg,fontWeight:800,color:"#fff",letterSpacing:-0.3}}>
+            {MONTHS[curMonthIdx]}
+          </div>
+          <div style={{fontSize:T.sm,color:"#888899",marginTop:1}}>{curYear}</div>
+        </div>
+
+        <button onClick={()=>navigate(1)} style={{background:"#222",border:"none",
+          color:"#aaaabc",borderRadius:10,width:36,height:36,fontSize:18,
+          cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+      </div>
+
+      {/* ── Income Hero ── */}
+      <div style={{background:"linear-gradient(160deg,#1a1a1a,#141414)",
+        border:"1px solid #2e2e2e",borderRadius:24,padding:"22px 24px 20px",
+        marginBottom:24,position:"relative",overflow:"hidden",
+        boxShadow:"0 4px 28px #00000085"}}>
+        <div style={{position:"absolute",top:-40,right:-40,width:180,height:180,
+          borderRadius:"50%",background:"radial-gradient(circle,#00e67624,transparent 70%)",
+          pointerEvents:"none"}}/>
+        <div style={{color:"#888899",fontSize:T.sm,marginBottom:8}}>Ingreso total del mes</div>
+        <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:18}}>
+          <span style={{color:"#444455",fontSize:T.lg,fontWeight:500,alignSelf:"center"}}>$</span>
+          {editingIncome?(
+            <input autoFocus value={rawIncome}
+              onChange={e=>setRawIncome(e.target.value)}
+              onBlur={commitIncome}
+              onKeyDown={e=>{if(e.key==="Enter")commitIncome();if(e.key==="Escape")setEI(false);}}
+              style={{background:"none",border:"none",borderBottom:"2px solid #00e676",
+                color:"#00e676",fontSize:T.hero,fontWeight:800,
+                outline:"none",width:"100%",letterSpacing:-1}}/>
+          ):(
+            <span onClick={startEditIncome} style={{
+              color:"#00e676",fontSize:T.hero,fontWeight:800,letterSpacing:-1,cursor:"pointer"}}>
+              {fmtPlain(monthData.income)}
+            </span>
+          )}
+        </div>
+        <div style={{display:"flex",borderTop:"1px solid #252525",paddingTop:16}}>
+          <div style={{flex:1}}>
+            <div style={{color:"#888899",fontSize:T.xs,marginBottom:4}}>Gastos totales</div>
+            <div style={{color:"#ff3d3d",fontWeight:800,fontSize:T.lg}}>{fmt(totalGastos)}</div>
+          </div>
+          <div style={{width:1,background:"#252525",margin:"0 20px"}}/>
+          <div style={{flex:1}}>
+            <div style={{color:"#888899",fontSize:T.xs,marginBottom:4}}>Balance libre</div>
+            <div style={{fontWeight:800,fontSize:T.lg,color:balance>=0?"#00e676":"#ff3d3d"}}>
+              {fmt(balance)}
+              <span style={{color:"#555566",fontSize:T.sm,fontWeight:500,marginLeft:6}}>
+                {monthData.income?Math.round(balance/monthData.income*100):0}%
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Allocations ── */}
+      <div style={{marginBottom:24}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <span style={{color:"#888899",fontSize:T.xs,letterSpacing:2,textTransform:"uppercase"}}>
+            Distribución del Ingreso
+          </span>
+          <span style={{fontSize:T.sm,fontWeight:700,color:allocTotal===100?"#00e676":"#f0a500"}}>
+            {allocTotal}% / 100%
+          </span>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          {monthData.allocations.map(a=>(
+            <AllocCard key={a.id} alloc={a} income={monthData.income}
+              onChange={updated=>updateMonth({
+                allocations:monthData.allocations.map(x=>x.id===a.id?updated:x)
+              })}/>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Expense sections ── */}
+      <div style={{color:"#888899",fontSize:T.xs,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>
+        Detalle de Gastos
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {monthData.sections.map(sec=>(
+          <Section key={sec.id} sec={sec} income={monthData.income}
+            onUpdate={updated=>updateMonth({sections:monthData.sections.map(s=>s.id===sec.id?updated:s)})}
+            onDelete={()=>updateMonth({sections:monthData.sections.filter(s=>s.id!==sec.id)})}/>
+        ))}
+        <button onClick={addSection}
+          style={{background:"none",border:"1px dashed #252525",color:"#555566",
+            borderRadius:16,padding:"14px",fontSize:T.sm,cursor:"pointer"}}
+          onMouseOver={e=>e.currentTarget.style.borderColor="#00e67645"}
+          onMouseOut={e=>e.currentTarget.style.borderColor="#252525"}>
+          + Nueva sección
+        </button>
+      </div>
+
+      <div style={{marginTop:40,textAlign:"center",color:"#222",fontSize:T.xs}}>
+        Finanzas DL · Se guarda automáticamente
+      </div>
+
+      {showPicker&&(
+        <MonthPicker currentKey={root.currentKey} months={root.months}
+          onSelect={selectMonth} onClose={()=>setShowPicker(false)}/>
+      )}
+      <Toast msg={toast}/>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js')
+    .then(() => console.log('Service Worker registrado'))
+    .catch(err => console.error(err));
+}
+</script>
+</body>
+</html>
